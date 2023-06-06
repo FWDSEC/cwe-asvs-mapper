@@ -1,12 +1,17 @@
 import json
+import os
+import glob
 
 def main():
     scan_resultant_cwes = []
-    with open( "test-cwes.json", "r" ) as f:
+    with open( "./tests/test-cwes.json", "r" ) as f:
         scan_resultant_cwes = json.loads( f.read() )
 
     asvs_cwe_map = {}
-    with open( "./out/asvs-w-all-cwes.1686079575.json", 'r' ) as f:
+
+    files = list(filter( os.path.isfile, glob.glob( "./out/*" ) ))
+    files.sort( key=lambda x: os.path.getmtime(x) )
+    with open( files[-1], 'r' ) as f:
         asvs_cwe_map = json.loads( f.read() )
 
 
