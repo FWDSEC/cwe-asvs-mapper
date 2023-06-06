@@ -8,7 +8,8 @@ import re
 from time import time
 
 
-tmp_dir = "./tmp"
+rel_dir = "/shared" if os.environ['INSIDE_DOCKER'] else "."
+tmp_dir = f"{rel_dir}/tmp"
 
 def init_workspace():
 
@@ -190,7 +191,7 @@ def main():
     cwe_items = normalize_cwe( cwe_xml_filename )
     asvs_items = add_cwes_to_asvs( asvs_json_filename, cwe_items )
 
-    output_dir = "./out"
+    output_dir = f"{rel_dir}/out"
     if not os.path.exists( output_dir ):
         os.mkdir( output_dir )
     output_file = f'{output_dir}/asvs-w-all-cwes.{int(time())}.json'
