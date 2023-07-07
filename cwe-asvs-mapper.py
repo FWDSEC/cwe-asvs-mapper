@@ -6,9 +6,10 @@ import json
 import xml.etree.ElementTree as ET
 import re
 from time import time
+import networkx as nx
 
 
-rel_dir = "/shared" if os.environ['INSIDE_DOCKER'] else "."
+rel_dir = "/shared" if os.environ.get('INSIDE_DOCKER', "") else "."
 tmp_dir = f"{rel_dir}/tmp"
 
 def init_workspace():
@@ -63,57 +64,59 @@ def get_namespace( element ):
     m = re.match(r'\{.*\}', element.tag)
     return m.group(0) if m else ''
 
-def normalize_cwe( xml_file ):
-  
+def construct_cwe_graph( xml_file ):
     tree = ET.parse( xml_file )
     root = tree.getroot()
     namespace = get_namespace( root )
 
     cwe_items = {}
+    cwe_graph = nx.DiGraph()
   
     child_of_attr = { "prop": "Nature", "val": "ChildOf" }
     cwe_id_attr = "CWE_ID"
     # CWE Weaknesses
     for weakness in root.findall( f'{namespace}Weaknesses/{namespace}Weakness' ):
-  
-        if weakness.attrib['ID'] not in cwe_items.keys():
-            cwe_items[ weakness.attrib['ID'] ] = { "parent_cwes": [], "child_cwes": [] }
-
+        cwe_id = weakness.attrib['ID']
+        if cwe_id not in cwe_items.keys():
+            cwe_items[ cwe_id ] = { "parent_cwes": [], "child_cwes": [] }
+            cwe_graph.add_node( cwe_id )
         for rel_wkns in weakness.findall( f'{namespace}Related_Weaknesses/{namespace}Related_Weakness' ):
-
             if child_of_attr['prop'] in rel_wkns.attrib.keys() and rel_wkns.attrib[ child_of_attr['prop'] ] == child_of_attr['val']:
-                if rel_wkns.attrib[ cwe_id_attr ] not in cwe_items.keys():
-                    cwe_items[ rel_wkns.attrib[ cwe_id_attr ] ] = { "parent_cwes": [], "child_cwes": [] }
-                cwe_items[ weakness.attrib['ID'] ][ "parent_cwes" ].append( rel_wkns.attrib[ cwe_id_attr ] )
-                cwe_items[ rel_wkns.attrib[ cwe_id_attr ] ][ "child_cwes" ].append( weakness.attrib['ID'] )
-    
-    # CWE Categories
+                rel_cwe_id = rel_wkns.attrib[ cwe_id_attr ]
+                if rel_cwe_id not in cwe_items.keys():
+                    cwe_items[ rel_cwe_id ] = { "parent_cwes": [], "child_cwes": [] }
+                cwe_graph.add_edge( cwe_id, rel_cwe_id )
+                cwe_items[ cwe_id ][ "parent_cwes" ].append( rel_cwe_id )
+                cwe_items[ rel_cwe_id ][ "child_cwes" ].append( cwe_id )
+
+        # CWE Categories
     for category in root.findall( f'{namespace}Categories/{namespace}Category' ):
-  
-        if category.attrib['ID'] not in cwe_items.keys():
-            cwe_items[ category.attrib['ID'] ] = { "parent_cwes": [], "child_cwes": [] }
-
+        cwe_id = category.attrib['ID']
+        if cwe_id not in cwe_items.keys():
+            cwe_items[ cwe_id ] = { "parent_cwes": [], "child_cwes": [] }
+            cwe_graph.add_node( cwe_id )
         for rel_wkns in category.findall( f'{namespace}Relationships/{namespace}Has_Member' ):
+            rel_cwe_id = rel_wkns.attrib[ cwe_id_attr ]
+            if rel_cwe_id not in cwe_items.keys():
+                cwe_items[ rel_cwe_id ] = { "parent_cwes": [], "child_cwes": [] }
+            cwe_items[ rel_cwe_id ][ "parent_cwes" ].append( cwe_id )
+            cwe_items[ cwe_id ][ "child_cwes" ].append( rel_cwe_id )
+            cwe_graph.add_edge( cwe_id, rel_cwe_id )
 
-            if rel_wkns.attrib[ cwe_id_attr ] not in cwe_items.keys():
-                cwe_items[ rel_wkns.attrib[ cwe_id_attr ] ] = { "parent_cwes": [], "child_cwes": [] }
-            cwe_items[ rel_wkns.attrib[ cwe_id_attr ] ][ "parent_cwes" ].append( category.attrib['ID'] )
-            cwe_items[ category.attrib['ID'] ][ "child_cwes" ].append( rel_wkns.attrib[ cwe_id_attr ] )
-    
     # CWE View
     for view in root.findall( f'{namespace}Views/{namespace}View' ):
-  
-        if view.attrib['ID'] not in cwe_items.keys():
-            cwe_items[ view.attrib['ID'] ] = { "parent_cwes": [], "child_cwes": [] }
-
+        cwe_id = view.attrib['ID']
+        if cwe_id not in cwe_items.keys():
+            cwe_items[ cwe_id ] = { "parent_cwes": [], "child_cwes": [] }
+            cwe_graph.add_node( cwe_id )
         for rel_wkns in view.findall( f'{namespace}Members/{namespace}Member' ):
+            rel_cwe_id = rel_wkns.attrib[ cwe_id_attr ]
+            if rel_cwe_id not in cwe_items.keys():
+                cwe_items[ cwe_id ] = { "parent_cwes": [], "child_cwes": [] }
+            cwe_items[ cwe_id ][ "parent_cwes" ].append( cwe_id )
+            cwe_items[ cwe_id ][ "child_cwes" ].append( cwe_id )
 
-            if rel_wkns.attrib[ cwe_id_attr ] not in cwe_items.keys():
-                cwe_items[ rel_wkns.attrib[ cwe_id_attr ] ] = { "parent_cwes": [], "child_cwes": [] }
-            cwe_items[ rel_wkns.attrib[ cwe_id_attr ] ][ "parent_cwes" ].append( view.attrib['ID'] )
-            cwe_items[ view.attrib['ID'] ][ "child_cwes" ].append( rel_wkns.attrib[ cwe_id_attr ] )
-      
-    return cwe_items
+    return (cwe_graph, cwe_items)
 
 def download_latest_asvs_db( use_cache ):
 
@@ -135,7 +138,7 @@ def download_latest_asvs_db( use_cache ):
 
     return json_filename
 
-def add_cwes_to_asvs( json_file, cwe_items ):
+def add_cwes_to_asvs( json_file, cwe_items, cwe_graph ):
     
     asvs_items = {}
     with open( json_file, 'r' ) as f:
@@ -148,18 +151,21 @@ def add_cwes_to_asvs( json_file, cwe_items ):
     for item in asvs_items['requirements'] :
         if not item["CWE"]:
             continue
-
         item["CWE_parents"] = list(set(get_cwe_ancestors( [item["CWE"]], cwe_items, "parent_cwes" )))
         item["CWE_children"] = list(set(get_cwe_ancestors( [item["CWE"]], cwe_items, "child_cwes" )))
         item["CWE_parents"].remove( item["CWE"] )
         item["CWE_children"].remove( item["CWE"] )
         item["CWE_related"] = item["CWE_parents"] + item["CWE_children"]
+        asvs_items['cwe_map'][ item["CWE"] ] = asvs_items['cwe_map'].get(item["CWE"], []) +  [item["Item"][1:]]
 
-        # Add inverted list
-        for cwe in item["CWE_related"]:
-            if cwe not in asvs_items['cwe_map'].keys():
-                asvs_items['cwe_map'][ cwe ] = []
-            asvs_items['cwe_map'][ cwe ].append( item["Item"][1:] )
+    # Add ASVS of nearest mapped parents to CWE without ASVS mapping
+    for cwe in sorted(cwe_graph.nodes, key=lambda node: cwe_graph.out_degree(node), reverse=True):
+        if cwe in asvs_items['cwe_map'].keys():
+            continue
+        for edges in nx.edge_bfs(cwe_graph, cwe, orientation="reverse"):
+            if edges[0] in asvs_items['cwe_map'].keys():
+                asvs_items['cwe_map'][cwe] = asvs_items['cwe_map'].get(cwe, []) + asvs_items['cwe_map'][edges[0]]
+                break
 
     return asvs_items
 
@@ -188,8 +194,8 @@ def main():
     asvs_json_filename = download_latest_asvs_db( use_cache )
 
     print( "Normalizing data for lookups" )
-    cwe_items = normalize_cwe( cwe_xml_filename )
-    asvs_items = add_cwes_to_asvs( asvs_json_filename, cwe_items )
+    (cwe_graph, cwe_items) = construct_cwe_graph( cwe_xml_filename )
+    asvs_items = add_cwes_to_asvs( asvs_json_filename, cwe_items, cwe_graph )
 
     output_dir = f"{rel_dir}/out"
     if not os.path.exists( output_dir ):
