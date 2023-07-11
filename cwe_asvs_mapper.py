@@ -48,6 +48,7 @@ class CweAsvsMapper:
         m = re.match(r'\{.*\}', element.tag)
         return m.group(0) if m else ''
 
+    # Create a Digraph from CWEs where edges are "ChildOf" relationships
     def construct_cwe_graph( self, xml_file ):
         tree = ET.parse( xml_file )
         root = tree.getroot()
@@ -73,7 +74,7 @@ class CweAsvsMapper:
                     cwe_items[ cwe_id ][ "parent_cwes" ].append( rel_cwe_id )
                     cwe_items[ rel_cwe_id ][ "child_cwes" ].append( cwe_id )
 
-            # CWE Categories
+        # CWE Categories
         for category in root.findall( f'{namespace}Categories/{namespace}Category' ):
             cwe_id = category.attrib['ID']
             if cwe_id not in cwe_items.keys():
@@ -179,16 +180,3 @@ class CweAsvsMapper:
         (cwe_graph, cwe_items) = self.construct_cwe_graph( cwe_xml_filename )
         asvs_items = self.add_cwes_to_asvs( asvs_json_filename, cwe_items, cwe_graph )
         return asvs_items
-    
-        output_dir = f"{rel_dir}/out"
-        if not os.path.exists( output_dir ):
-            os.mkdir( output_dir )
-        output_file = f'{output_dir}/asvs-w-all-cwes.{int(time())}.json'
-        with open( output_file, 'w' ) as f:
-            f.write( json.dumps( asvs_items, indent=4 ) )
-
-        #clear_workspace()
-
-        print( "Complete!" )
-        print( f"File written to {output_file}" )
-

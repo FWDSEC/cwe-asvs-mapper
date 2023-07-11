@@ -18,6 +18,7 @@ class CweCveMapper:
         
         print( "Download latest CVE database..." )
 
+        # Get latest release URL from CVE Github
         releases_response = requests.get("https://api.github.com/repos/CVEProject/cvelistV5/releases/latest")
         releases_json = json.loads(releases_response.content)
         assets = releases_json.get("assets", [])
@@ -27,6 +28,8 @@ class CweCveMapper:
             cve_asset_url = cve_asset.get("browser_download_url")
             cve_asset_name = cve_asset.get("name")
             cve_asset_zip_path = f"{self.tmp_dir}/{cve_asset_name}"
+
+            # Download latest release
             with open(cve_asset_zip_path, 'wb') as f:
                 req = requests.get(cve_asset_url, allow_redirects=True)
                 f.write(req.content)
@@ -44,7 +47,7 @@ class CweCveMapper:
             for description in problem.get("descriptions", []):
                 if description.get("type") == "CWE":
                     return True
-                
+
     def cve_generator( self, cve_directory_name ):
         for root, _, files in os.walk(f"{cve_directory_name}/cves/cves"):
             for file in files:

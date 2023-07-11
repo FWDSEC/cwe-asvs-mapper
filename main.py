@@ -31,8 +31,10 @@ def main():
     output_dir = f"{rel_dir}/out"
     if not os.path.exists( output_dir ):
         os.mkdir( output_dir )
+
     cve_to_cwe_output_file = f'{output_dir}/cve-to-cwe.{int(time())}.json'
     cwe_to_asvs_output_file = f'{output_dir}/cwe-to-asvs.{int(time())}.json'
+
     with open( cve_to_cwe_output_file, 'w' ) as f:
         json.dump( cve_to_cwe_mapper.perform_mapping(), f)
     with open( cwe_to_asvs_output_file, 'w' ) as f:
