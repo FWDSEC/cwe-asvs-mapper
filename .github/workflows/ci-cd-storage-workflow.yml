@@ -1,0 +1,23 @@
+name: CI-CD-Storage-Workflow
+on:
+  schedule:
+    - cron: 0 0 * * 0
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Deploy mappings to Blob Storage
+    steps:
+      - uses: actions/checkout@main
+      - name: Build & Run
+        run: |
+          mkdir shared
+          docker build -t cve-cwe-asvs-mapper .
+          docker run -v $(pwd)/shared:/shared cve-cwe-asvs-mapper
+      - name: Upload to Blob Storage
+        run: >
+          mv ./shared/out/cve-to-cwe.*.json ./shared/out/cve-to-cwe.json
+          mv ./shared/out/cwe-to-asvs.*.json ./shared/out/cwe-to-asvs.json
+          az storage blob upload-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_ACCESS_KEY }} --destination ${{ secrets.AZURE_STORAGE_CONTAINER }} --source ./out/cve-to-cwe.latest.json --overwrite
+          az storage blob upload-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_ACCESS_KEY }} --destination ${{ secrets.AZURE_STORAGE_CONTAINER }} --source ./out/cve-to-cwe.$(date +%Y-%m-%d).json
+          az storage blob upload-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_ACCESS_KEY }} --destination ${{ secrets.AZURE_STORAGE_CONTAINER }} --source ./out/cwe_to_asvs.latest.json --overwrite
+          az storage blob upload-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_ACCESS_KEY }} --destination ${{ secrets.AZURE_STORAGE_CONTAINER }} --source ./out/cwe_to_asvs.$(date +%Y-%m-%d).json
