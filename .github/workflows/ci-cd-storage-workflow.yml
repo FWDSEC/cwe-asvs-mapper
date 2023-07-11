@@ -1,10 +1,7 @@
-# Runs mapping script on a schedule (once per week) and pushes the results into our central Blob Storage account
-
 name: CI-CD-Storage-Workflow
-  on:
-    schedule:
-      - cron: '0 0 * * 0'
-
+on:
+  schedule:
+    - cron: 0 0 * * 0
   jobs:
     build:
       runs-on: ubuntu-latest
@@ -17,7 +14,7 @@ name: CI-CD-Storage-Workflow
             docker build -t cve-cwe-asvs-mapper .
             docker run -v $(pwd)/shared:/shared cve-cwe-asvs-mapper
         - name: Upload to Blob Storage
-          run: |
+          run: >
             mv ./shared/out/cve-to-cwe.*.json ./shared/out/cve-to-cwe.json
             mv ./shared/out/cwe-to-asvs.*.json ./shared/out/cwe-to-asvs.json
             az storage blob upload-batch --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_ACCESS_KEY }} --destination ${{ secrets.AZURE_STORAGE_CONTAINER }} --source ./out/cve-to-cwe.latest.json --overwrite
